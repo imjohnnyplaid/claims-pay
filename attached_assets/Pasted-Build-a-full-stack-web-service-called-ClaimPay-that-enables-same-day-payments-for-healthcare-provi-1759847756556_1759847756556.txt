@@ -1,0 +1,49 @@
+Build a full-stack web service called "ClaimPay" that enables same-day payments for healthcare provider claims. We pay providers ~95% of the claim amount immediately (our cut: 5%, adjustable dynamically), then submit the full claim to insurance for reimbursement. Core goal: Automate everything with AI for speed and accuracy.
+Tech Stack:
+- Backend: Python with Flask/Django, PostgreSQL for DB (store claims, user data, historical uploads).
+- AI/ML: Use Hugging Face Transformers for auto-coding (fine-tune on uploaded claims data); scikit-learn for risk engine (output score 0-100: low=reject/recode, high=pay).
+- Frontend: React for portals (responsive, real-time via WebSockets/Socket.io).
+- Integrations: Stripe for payments, Twilio/SendGrid for notifications, Zoom API for scheduling, Slack API for channels, Google Calendar for reps.
+- Security: JWT auth, HIPAA-compliant (encrypt claims data).
+Core Workflows (implement as microservices/endpoints):
+1. AI Auto-Coding:
+   - Input: Raw claim (text/PDF/EMR export) from provider upload.
+   - Process: AI model auto-assigns codes (e.g., ICD-10, CPT). If errors, loop through risk engine → recode/retrain model on failures.
+   - Output: Coded claim JSON.
+2. AI Risk Engine:
+   - Input: Coded claim.
+   - Process: Score for payment likelihood (factors: code accuracy, historical denial rates from uploaded data, provider volume). Threshold: >80 = accept/pay.
+   - Output: Risk score + decision (pay/reject). On reject: Flag for recode, retrain auto-coder.
+3. Payment Engine:
+   - Input: Accepted claim.
+   - Process: Calculate payout (claim value * 0.95), send via Stripe ACH to provider bank. Submit full claim to insurance API (mock for now).
+   - Output: Transaction ID, real-time status update.
+Provider UX/Workflow (Customer Portal):
+- Onboarding: Self-guided React wizard. Collect: Username/password, contact, provider NPI/TIN, EMR API keys, bank routing/account, upload 2+ years claims data (parse CSV/PDF into DB), invite team users (link to primary account).
+- Post-Onboarding: Dashboard with date filters (day/week/month/QTD/YTD/year; default=day).
+  - Metrics (real-time charts/tables): Total submitted claims, coded claims, accepted claims, rejected claims (unpaid only), paid claims, total paid amount (our payouts), total submission value (full claim amounts for accepted), file size of submissions, acceptance rate % (e.g., 98%), historical portfolio (from uploads: current revenue vs. past, total value, yesterday's balance, benefit metrics like "Days to payment: 0 vs. historical 30").
+  - Claims table: Real-time status (submitted → coded → risk check → accepted/rejected → paid), with filters/search.
+- Automations: On complete, add to internal systems (below).
+Internal UX/Workflow (Admin Dashboard):
+- Overview: Track AI status (uptime, error rates), customers (# active/onboarded), revenue (insurance reimbursements in), payments out, profit (reimbursements - payouts), dynamic cut % (per provider/volume/risk).
+- Portfolio: Historical data/projections (e.g., line charts for revenue growth).
+- New Customer Flow:
+  - Auto-add to DB, assign random account rep from pool.
+  - Notify rep via Slack/email: "New customer [Name]: [Brief: Provider type, claims volume estimate]."
+  - Schedule Zoom: Use API to poll customer availability, send invites with slots, confirm → add to rep's Google Calendar + customer email.
+  - Post-meeting: Rep guides portal tour (log call notes in DB).
+- AI Dev Alerts: On new customer, check resource load (e.g., via Replit metrics); if >80% CPU, spin up new instance. Add to status reports (email/Slack on maintenance/updates).
+- Dedicated Slack: Auto-create channel per customer, invite rep + customer.
+Bank UX/Workflow (Partner Portal):
+- Dashboard for funding partners: Track funded claims volume/value, reimbursement status (pending/paid), our default risk (low via AI), ROI projections (e.g., 2% yield on funds).
+- Metrics: Total funded amount, avg. claim turnaround (same-day), denial rate (<2%), portfolio exposure (outstanding reimbursements), alerts for high-risk batches.
+- Flows: View claim batches, approve funding pools, download reports (CSV/PDF), integrate with their systems via API.
+Implementation Steps in Replit:
+1. Generate project structure: Folders for backend (app.py, models.py), frontend (src/components), AI (coder.py, risk.py), DB migrations.
+2. Start with DB schema: Tables for users/providers, claims (status, codes, scores, amounts), historical data, transactions.
+3. Build onboarding endpoint + React form.
+4. Implement AI pipelines (mock data first, then fine-tune on sample claims).
+5. Add real-time dashboard with Chart.js for metrics.
+6. Wire automations (e.g., Celery for background tasks like scheduling).
+7. Test end-to-end: Simulate provider upload → payment → internal alert.
+Output: Full code skeleton with README for setup/testing. Explain how to deploy on Replit (e.g., via Railway for prod). Prioritize HIPAA mocks for now.

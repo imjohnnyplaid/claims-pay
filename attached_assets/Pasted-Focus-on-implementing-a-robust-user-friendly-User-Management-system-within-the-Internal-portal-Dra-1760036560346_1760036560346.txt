@@ -1,0 +1,160 @@
+Focus on implementing a robust, user-friendly User Management system within the Internal portal. Draw inspiration from established user management systems like Auth0 (for role-based permissions and admin APIs), Okta (for multi-tenant isolation and audit trails), and AWS IAM (for granular RBAC with resource-scoped actions). Use Role-Based Access Control (RBAC) as the core model: permissions are fine-grained actions (e.g., read:users, update:password) on resources (e.g., user:customer, claim:bank). Roles bundle permissions, and users are assigned roles scoped to their user type and tenant (here, "tenant" means portal type for isolation).
+1. Database Structure (Backend Setup)
+
+User Schema (MongoDB collection: users):
+
+_id: ObjectId (auto-generated).
+email: String (unique, required).
+password: String (hashed with bcrypt).
+username: String (unique).
+userType: Enum ['internal', 'customer', 'bank'] (required; determines portal access).
+role: String (for internal users only; enum ['super_admin', 'admin', 'team_member']; default null for non-internal).
+portalData: Object (nested; e.g., for customers: { providerInfo: {}, bankInfo: {}, emrInfo: {} }; for banks: { institutionDetails: {} }).
+status: Enum ['active', 'suspended', 'invited'] (default 'invited').
+invitedBy: ObjectId (ref to user who invited).
+lastLogin: Date.
+createdAt, updatedAt: Timestamps.
+Indexes: Unique on email/username; compound on userType + email for quick tenant queries.
+
+
+Permissions Schema (collection: permissions – seeded on startup):
+
+_id: ObjectId.
+name: String (e.g., 'read:users:customer' – format: <action>:<resource>:<scope> where scope is 'all', 'own', or 'type:<userType>').
+description: String (e.g., "View customer user profiles").
+
+
+Roles Schema (collection: roles – seeded on startup, scoped to internal users):
+
+_id: ObjectId.
+name: Enum ['super_admin', 'admin', 'team_member'].
+permissions: Array of ObjectId (refs to permissions).
+description: String.
+
+
+Seed initial data on app start (in a migration script):
+
+Permissions: Cover all actions like create:user, read:user, update:user (sub-actions: email, password, role), delete:user, suspend:user, invite:user, view:dashboard, manage:claims (scoped to userType).
+Roles:
+
+Super Admin: All permissions (e.g., full CRUD on users/roles/permissions across all userTypes; system config like adjust claim discounts; view/edit all data; audit logs; scale resources).
+Admin: Most permissions except role/permissions management and system config (e.g., full CRUD on users across all types; view/edit claims/revenue; but cannot change other internal roles or delete permissions).
+Team Member: View-only (e.g., read:users:all, read:dashboard, read:claims; no updates/deletes; can filter by date ranges but cannot act).
+
+
+
+
+Role Assignment: On user creation/update, validate role only for internal users. Use middleware to enforce: Query user's role permissions and check against requested action (e.g., canUser(action, resource, scope) function).
+Audit Log Schema (collection: auditLogs):
+
+userId: ObjectId (who performed action).
+action: String (e.g., 'update:user:password').
+targetId: ObjectId (affected user/resource).
+details: Object (before/after values).
+timestamp: Date.
+Log every permission-checked action for Super Admins to review.
+
+
+
+2. Backend API Endpoints (Express.js Routes)
+
+Use JWT for auth (sign on login, include userType/role in payload).
+Middleware: authenticateToken, authorize(permission) (checks role's permissions array).
+Base route: /api/v1/users (protected by auth).
+User Management Endpoints (scoped by logged-in user's permissions):
+
+GET /users?type=<userType>&status=<status>&search=<query>&page=<int>&limit=<int>: List users (filterable by type, status, search on email/username; paginated; Admin+ can see all, Team Member filtered to own type).
+GET /users/:id: View single user details (full for Admin+, basic for Team Member).
+POST /users: Create/invite user (specify type; auto-generate invite token/email; Super Admin+).
+PUT /users/:id: Update user (sub-routes or body flags for email, password reset, role assign, status toggle; validate permissions per sub-action, e.g., only Super Admin changes roles).
+DELETE /users/:id: Soft-delete/suspend (Admin+).
+POST /users/:id/invite: Resend invite (Admin+).
+POST /users/:id/reset-password: Generate/reset password link (Admin+ for any type; self for own).
+GET /roles: List roles/permissions (Super Admin only).
+PUT /roles/:roleId: Update role permissions (Super Admin only).
+GET /audit-logs?userId=<id>&action=<string>&from=<date>&to=<date>: View logs (Admin+).
+
+
+Error Handling: 403 for insufficient permissions; include helpful messages like "Upgrade to Admin role to edit bank users."
+Security: Rate-limit sensitive actions (e.g., password resets); hash passwords; validate inputs with Joi.
+
+3. Frontend Structure (React App in Internal Portal)
+
+Use React Router for navigation; Context API or Redux for auth state (store userType/role/permissions).
+Internal Portal Layout: Sidebar with tabs: "Dashboard", "User Management" (sub-tabs: All Users, Internal Users, Customer Users, Bank Users), "Claims Overview", "Revenue & Projections".
+User Management Page:
+
+Search & Filters Bar: Dropdown for userType (All, Internal, Customer, Bank), status, date range (created/last login); search input; "Export CSV" button (Admin+).
+Users Table (use React Table or Material-UI DataGrid for sortable/paginated table):
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ColumnContentActions (based on role)Username/EmailDisplay name & email-User TypeBadge (Customer/Bank/Internal)-Role (Internal only)Super Admin/Admin/Team MemberEdit (Super Admin only)StatusActive/Suspended/Invited (color-coded)Toggle (Admin+)Last LoginDate-Actions-View Details | Edit (Admin+) | Suspend/Activate (Admin+) | Reset Password (Admin+) | Delete (Super Admin) | Invite (Admin+)
+
+Bulk Actions: Select multiple users; dropdown for "Suspend Selected", "Reset Passwords" (Admin+; confirm modal with warnings).
+Add User Button: Modal form for new user (fields: email, username, userType, role (if internal), portalData; auto-invite on submit).
+User Details Modal/Edit Form:
+
+Tabs: Profile (email, username, contact), Permissions/Role (internal only; dropdown to assign), Activity (linked audit logs), Portal Data (e.g., provider info for customers – editable fields).
+Save button with validation; show permission-based disables (e.g., Team Member sees read-only form).
+Password Reset: "Send Reset Link" button (emails via Nodemailer; link expires in 1hr).
+
+
+
+
+UX Best Practices (Inspired by Auth0/Okta Dashboards):
+
+Intuitive: Breadcrumbs (e.g., User Management > Customers > Edit Provider XYZ); tooltips on actions ("Reset password sends a secure email link").
+Informative: Success toasts ("User suspended – audit logged"); error banners ("Cannot edit Super Admins as Team Member"); loading spinners on API calls.
+Accessible: ARIA labels, keyboard nav; dark/light theme toggle.
+Responsive: Mobile-friendly table (stacked cards on small screens).
+Onboarding Flow: For new Internal users, guided tour highlighting management tabs.
+
+
+Permission Enforcement in UI: On app load, fetch user's permissions from backend; use hooks like usePermissions() to conditionally render/hide buttons (e.g., if (!hasPermission('update:user:customer')) hide Edit).
+
+4. Integration with Overall Service Workflow
+
+Tie into existing flows: When a customer onboards (web form), auto-create user with 'customer' type and invite; notify Internal via Slack/email.
+For banks: Portal shows funded claims, reimbursements; Internal can adjust funding limits per bank user.
+Scalability: Use MongoDB aggregation for complex queries (e.g., count active users by type); add caching (Redis if needed) for role checks.
+Testing: Include unit tests for auth middleware; e2e with Cypress for management flows.
+
+Generate the initial code structure: Backend (server.js, models, routes/users.js, middleware/auth.js); Frontend (App.js, components/UserManagement.js, UserTable.js); Seed script. Ensure it's modular for easy expansion (e.g., add more roles later). Prioritize security and UX for fast, dependable management – like a healthcare claims system that pays same-day, this should feel effortless and trustworthy.

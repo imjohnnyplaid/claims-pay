@@ -1,0 +1,56 @@
+Building on the existing portal switching feature (where Internal Super Admins and Admins can toggle between portals via a selector, using impersonation for customer/bank views), enhance it to support multi-entity viewing within the customer and bank portals. The customer portal handles multiple providers (each a “customer” entity with its own claims/portfolio data), and the bank portal handles multiple financial institutions (each a “bank” entity with its own funding/reimbursement data). When internal admins switch to these portals, provide a selector to choose which entity’s data to view, simulating access as that entity. This is only visible/available during impersonation (i.e., for internal admins); regular customer/bank users see only their own entity’s data without a selector.
+By default, when switching to customer or bank portal without specifying an impersonateId, auto-select and load the “most active” entity’s data:
+•  For customer portal: The provider with the highest number of purchased claims (aggregate from claims collection; use last 30 days for recency, tie-break by total paid amount).
+•  For bank portal: The bank with the highest funds transfers (total value of facilitated claim purchases; aggregate from claims/funding logs, last 30 days, tie-break by number of transactions).
+Admins can then use the selector to switch entities dynamically without leaving the portal.
+1. Backend Updates (Express.js)
+•  Update User/Claims Schemas (if needed):
+	•  Ensure users collection distinguishes primary entities: Add isPrimaryEntity: boolean (true for main provider/bank accounts; linked users reference via linkedTo: ObjectId).
+	•  In claims collection: Add bankId: ObjectId (ref to funding bank for purchased claims) for bank activity metrics.
+	•  Add fundingLogs collection (if not present): { bankId: ref, claimId: ref, amount: number, timestamp: date } for tracking funds transfers.
+•  Enhance POST /api/v1/switch-portal:
+	•  Make impersonateId optional in body.
+	•  If provided and valid (matches targetPortal type, active status), use it as before.
+	•  If omitted:
+		•  For ‘customer’: Query most active provider – Use aggregation: Claims.aggregate([{ $match: { status: 'paid', createdAt: { $gte: 30daysAgo } } }, { $group: { _id: '$userId', count: { $sum: 1 }, totalPaid: { $sum: '$paidAmount' } } }, { $sort: { count: -1, totalPaid: -1 } }, { $limit: 1 }]); set impersonateId to result._id.
+		•  For ‘bank’: Query most active bank – Aggregate: FundingLogs.aggregate([{ $match: { timestamp: { $gte: 30daysAgo } } }, { $group: { _id: '$bankId', totalValue: { $sum: '$amount' }, count: { $sum: 1 } } }, { $sort: { totalValue: -1, count: -1 } }, { $limit: 1 }]); set impersonateId to result._id.
+		•  If no activity, fallback to most recently created active entity.
+	•  In new JWT: Include impersonateId (required now), impersonating: true, and original internal role.
+	•  Response: Add { entityName: string } (e.g., provider name) for frontend display.
+•  New Endpoint: GET /api/v1/entities?type=<customer|bank>&search=<query> (protected; for selector population):
+	•  Return list of primary entities: { id: ObjectId, name: string, email: string, activityMetric: number (e.g., claim count for customers, totalValue for banks) }.
+	•  Filter by type; searchable on name/email; sorted by activityMetric descending.
+	•  Paginate if >50 results.
+•  New Endpoint: POST /api/v1/switch-entity (protected, impersonating only):
+	•  Body: { targetId: ObjectId }.
+	•  Validate: Matches current portal type, user has canSwitchPortals.
+	•  Generate new JWT with updated impersonateId; log in auditLogs.
+	•  Response: { token: newJWT } (frontend refreshes to reload data).
+•  Data Filtering: In all customer/bank routes (e.g., /claims, /dashboard), filter queries by req.user.impersonateId (e.g., where userId = impersonateId for customers; where bankId = impersonateId for banks). For non-impersonating users, use their own _id.
+•  Security: Ensure only internal admins can access these; prevent entity switches for suspended/inactive ones.
+2. Frontend Updates (React App)
+•  Update Portal Selector (in Layout.js):
+	•  When selecting “Customer Portal” or “Bank Portal” in the dropdown/modal:
+		•  Allow “Quick Jump to Most Active” option (omits impersonateId in API call).
+		•  Or search/select specific entity (fetches from /entities, shows name + activityMetric in list, e.g., “Provider XYZ (150 claims)”).
+	•  On switch: If API returns impersonateId (auto-selected or chosen), store in auth state; redirect and refresh.
+•  Add Entity Selector UI (Customer/Bank Portals Only):
+	•  In top navbar (next to portal switcher, visible only if impersonating):
+		•  Dropdown: “Viewing as [Entity Name] ▼” (initially set to API-returned default).
+		•  Options: Searchable list from /entities (fetch on mount; show top 10 by activity, with “Search more…” modal).
+		•  On select: Call /switch-entity, update token/state, reload page/data (useContext or Redux to trigger refetches in dashboard components).
+	•  Banner Update: “Impersonating [Entity Name] – Switch entity or return to Internal.”
+•  Portal-Specific Rendering:
+	•  Customer Portal: Dashboard loads claims/portfolio/revenue metrics filtered by impersonateId; real-time updates (e.g., via WebSockets) scoped to entity.
+	•  Bank Portal: Loads funding/reimbursement data filtered by impersonateId; metrics like committed funds based on entity’s activity.
+	•  Default Load: On entry without specific id, show loading toast “Loading most active [provider/bank]: [Name]”.
+•  UX Polish (Service-Aligned for Efficiency):
+	•  Intuitive: Tooltips on selector (“Switch to view another provider’s real-time claims”); auto-suggest top active entities.
+	•  Informative: On switch, toast “Now viewing [Name] – [X] purchased claims in last 30 days”; error if no entities (“No active providers – Onboard one internally”).
+	•  Tie to Workflows: In internal user management tabs, add “Jump to Portal as This Entity” buttons per row (pre-sets impersonateId for direct switches).
+	•  Responsive/Accessible: Mobile dropdown; ARIA for selections.
+3. Integration with Existing Features
+•  Onboarding: When new provider completes, update activity metrics; if it’s the new “most active,” reflect in defaults.
+•  Metrics/Dashboards: Ensure entity-specific (e.g., customer portal acceptance rate is per provider).
+•  Testing: E2e for default jumps (e.g., switch to customer, verify loads highest-claim provider’s data, switch entity, check filters apply).
+Generate updated code: Backend (modify switch-portal, add switch-entity/entities routes, aggregations); Frontend (enhance PortalSelector with entity options, add EntitySelector component). Keep it secure, modular, and performant—empowering admins to monitor multi-entity operations seamlessly, from high-volume providers’ instant payments to top-funding banks’ reimbursements, all while maintaining dependable service workflows.

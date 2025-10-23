@@ -1,0 +1,75 @@
+Currently, the admin portal has a horizontal top navigation bar. I want to refactor it into a vertical left sidebar navigation, similar to Stripe's Dashboard in terms of layout and functionality (e.g., fixed sidebar on the left, collapsible sections with icons, hover/active states, responsive collapse on mobile, ability to minimize nav so that only the icons are visible). The font size for nav items should be 14px. The navigation should be structured like this for the admin (internal) portal:
+
+The sidebar should be ~240px wide on desktop, fixed position, with a subtle shadow, dark/light theme support (use CSS variables), and smooth transitions for expand/collapse. On mobile/tablet (<768px), it collapses to a hamburger menu overlay. Ensure it integrates seamlessly with my existing Replit app code (assume React/Next.js or vanilla HTML/CSS/JS structure—adapt as needed). The main content area should shift right with padding-top matching the sidebar height.
+Generate the full updated code and any JS for interactivity (e.g., toggle collapse). Include sample active states and responsiveness. Keep it modular so I can swap in my real nav items later for each portal.
+
+Internal Portal navigation:
+1. Top section (always visible): User profile dropdown (avatar, first name) with carat/angle down icon to the right of name.
+    1. Icon: user; Text: Profile
+    2. Icon: sign out; Text: Sign out
+2. Main Navigation (simple list with icons to the left of text)
+    1. Icon: house; Text: Home
+    2. Icon: code; Text: Coding
+    3. Icon: transaction, money, or wallet; Text: Transactions
+    4. Icon: star-of-life; Text: Providers
+    5. Icon: bank; Text: Banks
+3. Manage (below main nav, as a sub-list) — Put subheading “Manage” above list
+    1. Icon: users; Text: Users
+    2. Icon: lightning bolt; Text: System status
+    3. Icon: report, document, or chart; Text: Reports
+    4. Icon: hammer, wrench, or test-related icon; Text: Testing
+
+Destination/Content of each internal nav item:
+1. Top section
+    1. Profile: link to user profile info
+    2. Sign out: sign user out of portal
+2. Main Navigation
+    1. Home
+        1. Row, 3 columns, one metric per column: 
+            1. Total payments out (Total amount we’ve paid out to customers)
+            2. Total payments in (Total amount we’ve received back from the payer (insurance))
+            3. Gross Profit
+        2. Row, 3 columns, one metric per column:
+            1. Claims purchased (Total number of claims we’ve purchased from all customers)
+            2. Claims rejected (total number of claims we’ve rejected)
+            3. Active customers
+        3. Row, 4 columns, one metric per column:
+            1. AI model uptime
+            2. Error rate
+            3. Processing Speed
+            4. Payment speed
+                1. Add tooltip (info-circle icon). When hovered, show the following: Average amount of time from coding to payment
+        4. REMOVE: Revenue overview chart and recent customers table
+    2. Coding (create page as placeholder for now - no content at this time)
+    3. Transactions:
+        1. Row: 3 columns, single value charts
+            1. Total payments out
+            2. Total payment in
+            3. A/R days
+        2. Row: 2 columns - place charts below in order from left to right (Charts 1 & 2 and then 3 & 4 under, etc.)
+            1. Payments out (total amount paid out to customers for claims purchases)
+                1. Type: Single value with line-chart under
+            2. Payments in (total amount received back from the payer)
+                1. Type: Single value with line-chart under
+            3. Gross profit (Profit before any adjustments, final reconciliation, or disputes)
+                1. Type: Single value with line-chart under
+            4. Net profit (Profit after all claims are reconciled and adjustments made)
+                1. Type: Single value with line-chart under
+            5. A/R balance (The balance/value of purchased claims that haven’t been reimbursed yet - this is the combined value of the claim amounts, not the amount we paid for them)
+            6. A/R days (the average number of days from the date of claim purchase to the date of reimbursement)
+                1. Type: Single value with line-chart under
+            7. Claims paid (number of claims that were paid without issue)
+                1. Type: Single value with line-chart under
+            8. Claims denied (number of purchased claims that the payer denied after submission for reimbursement)
+                1. Type: single value with line chart under
+            9. Average Revenue Per Customer (total Monthly Recurring Revenue (MRR) divided by the number of active customers)
+                1. Type: single value with line chart under
+            10. Customer lifetime value (Lifetime Value (LTV) is equal to Average Revenue Per Customer (ARPS) divided by Customer Churn Rate. When the churn rate is 0% (i.e. no customers churned during the time period), a lifetime of 60 months is assumed.)
+                1. Type: single value with line chart under
+    4. Providers — This is the current Customers page
+    5. Banks — This is the current Funding Sources page
+3. Manage
+    1. Users — This is the current Users page
+    2. System Status — Placeholder nav link for now, no page needed yet.
+    3. Reports — Placeholder nav link for now, no page needed yet.
+    4. Testing — Placeholder nav link for now, no page needed yet.
